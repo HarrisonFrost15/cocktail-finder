@@ -1,0 +1,214 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cocktail Finder</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .search-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+      gap: 10px;
+    }
+    input, button, textarea {
+      padding: 10px;
+      font-size: 16px;
+    }
+    .cocktails {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .cocktail {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+    .cocktail img {
+      width: 100%;
+    }
+    .cocktail-content {
+      padding: 15px;
+    }
+    .cocktail h2 {
+      margin: 0 0 10px;
+      font-size: 20px;
+    }
+    .cocktail ul {
+      list-style: none;
+      padding: 0;
+    }
+    #custom-form {
+      display: none;
+      background: white;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    #custom-form .cocktail-content input {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    #ingredients-list input {
+      display: block;
+      width: 100%;
+      margin: 5px 0;
+    }
+    .form-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Cocktail Finder</h1>
+  <div class="search-container">
+    <input type="text" id="search" placeholder="Search by cocktail or ingredient..." />
+    <button onclick="searchCocktails()">Search</button>
+    <button onclick="toggleCustomForm()">Add Custom Cocktail</button>
+  </div>  <div id="custom-form">
+    <div class="cocktail">
+      <div class="cocktail-content">
+        <h2>Add a Custom Cocktail</h2>
+        <input type="file" id="custom-image" accept="image/*" /><br />
+        <input type="text" id="custom-name" placeholder="Cocktail Name" /><br />
+        <div id="ingredients-list">
+          <input type="text" placeholder="Ingredient" />
+        </div>
+        <div class="form-actions">
+          <button onclick="addIngredientField()">Add Ingredient</button>
+          <button onclick="addCustomCocktail()">Submit Cocktail</button>
+        </div>
+      </div>
+    </div>
+  </div>  <div class="cocktails" id="cocktails"></div>  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      loadCustomCocktails();
+    });
+
+    async function searchCocktails() {
+      const query = document.getElementById('search').value.trim().toLowerCase();
+      const container = document.getElementById('cocktails');
+      container.innerHTML = '';
+
+      let resultsFound = false;
+
+      // 1. Search CocktailDB API
+      if (query) {
+        try {
+          const url = `https://www.thecocktaildb.com/api/json/v1/1/search.php?s=${query}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          const drinks = data.drinks;
+
+          if (drinks) {
+            drinks.forEach(drink => {
+              const ingredients = [];
+              for (let i = 1; i <= 15; i++) {
+                const ingredient = drink[`strIngredient${i}`];
+                const measure = drink[`strMeasure${i}`];
+                if (ingredient) {
+                  ingredients.push(`${measure || ''} ${ingredient}`.trim());
+                }
+              }
+              renderCocktail(drink.strDrink, drink.strDrinkThumb, ingredients);
+            });
+            resultsFound = true;
+          }
+        } catch (error) {
+          console.error('Error fetching from API:', error);
+        }
+      }
+
+      // 2. Search custom cocktails from localStorage
+      const saved = JSON.parse(localStorage.getItem('customCocktails')) || [];
+      const matchedCustoms = saved.filter(cocktail => {
+        const nameMatch = cocktail.name.toLowerCase().includes(query);
+        const ingredientMatch = cocktail.ingredients.some(ing =>
+          ing.toLowerCase().includes(query)
+        );
+        return nameMatch || ingredientMatch;
+      });
+
+      if (matchedCustoms.length > 0) {
+        matchedCustoms.forEach(c => renderCocktail(c.name, c.imageSrc, c.ingredients));
+        resultsFound = true;
+      }
+
+      // 3. If nothing matched, show a message
+      if (!resultsFound) {
+        container.innerHTML = '<p>No cocktails found.</p>';
+      }
+    }
+
+    function toggleCustomForm() {
+      const form = document.getElementById('custom-form');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function addIngredientField() {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Ingredient';
+      document.getElementById('ingredients-list').appendChild(input);
+    }
+
+    function addCustomCocktail() {
+      const name = document.getElementById('custom-name').value.trim();
+      const imageInput = document.getElementById('custom-image');
+      const ingredientsInputs = document.querySelectorAll('#ingredients-list input');
+      const ingredients = Array.from(ingredientsInputs).map(i => i.value.trim()).filter(i => i);
+
+      if (!name || !imageInput.files.length || ingredients.length === 0) {
+        alert('Please fill in all fields and upload an image.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const imageSrc = e.target.result;
+        const cocktail = { name, imageSrc, ingredients };
+
+        const saved = JSON.parse(localStorage.getItem('customCocktails')) || [];
+        saved.push(cocktail);
+        localStorage.setItem('customCocktails', JSON.stringify(saved));
+
+        renderCocktail(name, imageSrc, ingredients);
+      };
+      reader.readAsDataURL(imageInput.files[0]);
+
+      document.getElementById('custom-form').style.display = 'none';
+    }
+
+    function renderCocktail(name, imageSrc, ingredients) {
+      const container = document.getElementById('cocktails');
+      const div = document.createElement('div');
+      div.className = 'cocktail';
+      div.innerHTML = `
+        <img src="${imageSrc}" alt="${name}" />
+        <div class="cocktail-content">
+          <h2>${name}</h2>
+          <ul>${ingredients.map(i => `<li>${i}</li>`).join('')}</ul>
+        </div>
+      `;
+      container.appendChild(div);
+    }
+
+    function loadCustomCocktails() {
+      const saved = JSON.parse(localStorage.getItem('customCocktails')) || [];
+      saved.forEach(c => renderCocktail(c.name, c.imageSrc, c.ingredients));
+    }
+  </script></body>
+</html>
