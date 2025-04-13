@@ -76,16 +76,6 @@
       flex-wrap: wrap;
       gap: 10px;
     }
-    .unit-select {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      z-index: 10;
-      background: #fff;
-      padding: 5px;
-      border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    }
     @media screen and (max-width: 600px) {
       input, button, select {
         width: 100%;
@@ -95,23 +85,11 @@
         flex-direction: column;
         align-items: stretch;
       }
-      .unit-select {
-        position: static;
-        margin-bottom: 10px;
-        align-self: flex-end;
-      }
     }
   </style>
 </head>
 <body>
   <h1>Cocktail Finder</h1>
-  <div class="unit-select">
-    <label for="unit">Unit:</label>
-    <select id="unit" onchange="convertUnits(true)">
-      <option value="ml">ml</option>
-      <option value="oz">oz</option>
-    </select>
-  </div>
   <div class="search-container">
     <input type="text" id="search" placeholder="Search by cocktail or ingredient..." />
     <button onclick="searchCocktails()">Search</button>
@@ -123,7 +101,7 @@
         <input type="file" id="custom-image" accept="image/*" /><br />
         <input type="text" id="custom-name" placeholder="Cocktail Name" /><br />
         <div id="ingredients-list">
-          <input type="text" placeholder="Ingredient (e.g., 30 ml Vodka)" oninput="liveConvert(this)" />
+          <input type="text" placeholder="Ingredient (e.g., 30 ml Vodka)" />
         </div>
         <div class="form-actions">
           <button onclick="addIngredientField()">Add Ingredient</button>
@@ -137,47 +115,14 @@
       loadCustomCocktails();
     });
 
-    function convertUnits(updateFields = false) {
-      const unit = document.getElementById('unit').value;
-      const saved = JSON.parse(localStorage.getItem('customCocktails')) || [];
-
-      saved.forEach(cocktail => {
-        cocktail.ingredients = cocktail.ingredients.map(ingredient => convertIngredient(ingredient, unit));
-      });
-
-      localStorage.setItem('customCocktails', JSON.stringify(saved));
-      if (updateFields) updateInputUnits();
-      searchCocktails();
-    }
-
-    function convertIngredient(ingredient, targetUnit) {
-      const match = ingredient.match(/(\d+(\.\d+)?)(\s*)(ml|oz)/i);
-      if (!match) return ingredient;
-
-      let value = parseFloat(match[1]);
-      const fromUnit = match[4].toLowerCase();
-      let converted = value;
-
-      if (targetUnit === 'ml' && fromUnit === 'oz') {
-        converted = (value * 29.5735).toFixed(0);
-        return ingredient.replace(/\d+(\.\d+)?\s*oz/i, `${converted} ml`);
-      } else if (targetUnit === 'oz' && fromUnit === 'ml') {
-        converted = (value / 29.5735).toFixed(1);
-        return ingredient.replace(/\d+(\.\d+)?\s*ml/i, `${converted} oz`);
+    function convertToMetric(ingredient) {
+      const match = ingredient.match(/(\d+(\.\d+)?)\s*oz/i);
+      if (match) {
+        const oz = parseFloat(match[1]);
+        const ml = (oz * 29.5735).toFixed(0);
+        return ingredient.replace(/\d+(\.\d+)?\s*oz/i, `${ml} ml`);
       }
       return ingredient;
-    }
-
-    function liveConvert(input) {
-      const unit = document.getElementById('unit').value;
-      input.value = convertIngredient(input.value, unit);
-    }
-
-    function updateInputUnits() {
-      const inputs = document.querySelectorAll('#ingredients-list input');
-      inputs.forEach(input => {
-        input.value = convertIngredient(input.value, document.getElementById('unit').value);
-      });
     }
 
     async function searchCocktails() {
@@ -201,7 +146,9 @@
                 const ingredient = drink[`strIngredient${i}`];
                 const measure = drink[`strMeasure${i}`];
                 if (ingredient) {
-                  ingredients.push(`${measure || ''} ${ingredient}`.trim());
+                  let full = `${measure || ''} ${ingredient}`.trim();
+                  full = convertToMetric(full);
+                  ingredients.push(full);
                 }
               }
               renderCocktail(drink.strDrink, drink.strDrinkThumb, ingredients);
@@ -238,7 +185,7 @@
       if (!edit) {
         document.getElementById('custom-name').value = '';
         document.getElementById('custom-image').value = '';
-        document.getElementById('ingredients-list').innerHTML = '<input type="text" placeholder="Ingredient (e.g., 30 ml Vodka)" oninput="liveConvert(this)" />';
+        document.getElementById('ingredients-list').innerHTML = '<input type="text" placeholder="Ingredient (e.g., 30 ml Vodka)" />';
         document.getElementById('edit-index').value = '';
         document.getElementById('form-title').innerText = 'Add a Custom Cocktail';
       }
@@ -249,7 +196,6 @@
       input.type = 'text';
       input.placeholder = 'Ingredient (e.g., 30 ml Vodka)';
       input.value = value;
-      input.oninput = () => liveConvert(input);
       document.getElementById('ingredients-list').appendChild(input);
     }
 
@@ -259,7 +205,6 @@
       const ingredientsInputs = document.querySelectorAll('#ingredients-list input');
       const ingredients = Array.from(ingredientsInputs).map(i => i.value.trim()).filter(i => i);
       const editIndex = document.getElementById('edit-index').value;
-      const unit = document.getElementById('unit').value;
 
       if (!name || (!imageInput.files.length && editIndex === '') || ingredients.length === 0) {
         alert('Please fill in all fields and upload an image.');
@@ -267,7 +212,7 @@
       }
 
       const handleSave = (imageSrc) => {
-        const cocktail = { name, imageSrc, ingredients, unit };
+        const cocktail = { name, imageSrc, ingredients };
         const saved = JSON.parse(localStorage.getItem('customCocktails')) || [];
 
         if (editIndex !== '') {
