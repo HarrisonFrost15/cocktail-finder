@@ -20,7 +20,7 @@
       margin-bottom: 20px;
       gap: 10px;
     }
-    input, button, textarea {
+    input, button, select, textarea {
       padding: 10px;
       font-size: 16px;
     }
@@ -76,8 +76,13 @@
       flex-wrap: wrap;
       gap: 10px;
     }
+    .unit-select {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+    }
     @media screen and (max-width: 600px) {
-      input, button {
+      input, button, select {
         width: 100%;
         box-sizing: border-box;
       }
@@ -90,6 +95,13 @@
 </head>
 <body>
   <h1>Cocktail Finder</h1>
+  <div class="unit-select">
+    <label for="unit">Unit:</label>
+    <select id="unit">
+      <option value="ml">ml</option>
+      <option value="oz">oz</option>
+    </select>
+  </div>
   <div class="search-container">
     <input type="text" id="search" placeholder="Search by cocktail or ingredient..." />
     <button onclick="searchCocktails()">Search</button>
@@ -97,7 +109,7 @@
   </div>  <div id="custom-form">
     <div class="cocktail">
       <div class="cocktail-content">
-        <h2>Add a Custom Cocktail</h2>
+        <h2 id="form-title">Add a Custom Cocktail</h2>
         <input type="file" id="custom-image" accept="image/*" /><br />
         <input type="text" id="custom-name" placeholder="Cocktail Name" /><br />
         <div id="ingredients-list">
@@ -105,8 +117,9 @@
         </div>
         <div class="form-actions">
           <button onclick="addIngredientField()">Add Ingredient</button>
-          <button onclick="addCustomCocktail()">Submit Cocktail</button>
+          <button onclick="submitCustomCocktail()">Submit Cocktail</button>
         </div>
+        <input type="hidden" id="edit-index" />
       </div>
     </div>
   </div>  <div class="cocktails" id="cocktails"></div>  <script>
@@ -157,7 +170,7 @@
       });
 
       if (matchedCustoms.length > 0) {
-        matchedCustoms.forEach(c => renderCocktail(c.name, c.imageSrc, c.ingredients));
+        matchedCustoms.forEach((c, index) => renderCocktail(c.name, c.imageSrc, c.ingredients, index));
         resultsFound = true;
       }
 
@@ -166,46 +179,67 @@
       }
     }
 
-    function toggleCustomForm() {
+    function toggleCustomForm(edit = false, index = null) {
       const form = document.getElementById('custom-form');
       form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      if (!edit) {
+        document.getElementById('custom-name').value = '';
+        document.getElementById('custom-image').value = '';
+        document.getElementById('ingredients-list').innerHTML = '<input type="text" placeholder="Ingredient" />';
+        document.getElementById('edit-index').value = '';
+        document.getElementById('form-title').innerText = 'Add a Custom Cocktail';
+      }
     }
 
-    function addIngredientField() {
+    function addIngredientField(value = '') {
       const input = document.createElement('input');
       input.type = 'text';
       input.placeholder = 'Ingredient';
+      input.value = value;
       document.getElementById('ingredients-list').appendChild(input);
     }
 
-    function addCustomCocktail() {
+    function submitCustomCocktail() {
       const name = document.getElementById('custom-name').value.trim();
       const imageInput = document.getElementById('custom-image');
       const ingredientsInputs = document.querySelectorAll('#ingredients-list input');
       const ingredients = Array.from(ingredientsInputs).map(i => i.value.trim()).filter(i => i);
+      const editIndex = document.getElementById('edit-index').value;
+      const unit = document.getElementById('unit').value;
 
-      if (!name || !imageInput.files.length || ingredients.length === 0) {
+      if (!name || (!imageInput.files.length && editIndex === '') || ingredients.length === 0) {
         alert('Please fill in all fields and upload an image.');
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const imageSrc = e.target.result;
-        const cocktail = { name, imageSrc, ingredients };
-
+      const handleSave = (imageSrc) => {
+        const cocktail = { name, imageSrc, ingredients, unit };
         const saved = JSON.parse(localStorage.getItem('customCocktails')) || [];
-        saved.push(cocktail);
+
+        if (editIndex !== '') {
+          saved[editIndex] = cocktail;
+        } else {
+          saved.push(cocktail);
+        }
+
         localStorage.setItem('customCocktails', JSON.stringify(saved));
-
-        renderCocktail(name, imageSrc, ingredients);
+        document.getElementById('custom-form').style.display = 'none';
+        searchCocktails();
       };
-      reader.readAsDataURL(imageInput.files[0]);
 
-      document.getElementById('custom-form').style.display = 'none';
+      if (imageInput.files.length) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          handleSave(e.target.result);
+        };
+        reader.readAsDataURL(imageInput.files[0]);
+      } else {
+        const saved = JSON.parse(localStorage.getItem('customCocktails'));
+        handleSave(saved[editIndex].imageSrc);
+      }
     }
 
-    function renderCocktail(name, imageSrc, ingredients) {
+    function renderCocktail(name, imageSrc, ingredients, index = null) {
       const container = document.getElementById('cocktails');
       const div = document.createElement('div');
       div.className = 'cocktail';
@@ -214,6 +248,7 @@
         <div class="cocktail-content">
           <h2>${name}</h2>
           <ul>${ingredients.map(i => `<li>${i}</li>`).join('')}</ul>
+          ${index !== null ? `<button onclick="editCocktail(${index})">Edit</button>` : ''}
         </div>
       `;
       container.appendChild(div);
@@ -221,7 +256,20 @@
 
     function loadCustomCocktails() {
       const saved = JSON.parse(localStorage.getItem('customCocktails')) || [];
-      saved.forEach(c => renderCocktail(c.name, c.imageSrc, c.ingredients));
+      saved.forEach((c, index) => renderCocktail(c.name, c.imageSrc, c.ingredients, index));
+    }
+
+    function editCocktail(index) {
+      const saved = JSON.parse(localStorage.getItem('customCocktails')) || [];
+      const cocktail = saved[index];
+
+      document.getElementById('custom-name').value = cocktail.name;
+      document.getElementById('ingredients-list').innerHTML = '';
+      cocktail.ingredients.forEach(i => addIngredientField(i));
+      document.getElementById('edit-index').value = index;
+      document.getElementById('form-title').innerText = 'Edit Custom Cocktail';
+
+      toggleCustomForm(true, index);
     }
   </script></body>
 </html>
