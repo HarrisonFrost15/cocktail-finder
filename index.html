@@ -116,11 +116,12 @@
     });
 
     function convertToMetric(ingredient) {
-      const match = ingredient.match(/(\d+(\.\d+)?)\s*oz/i);
+      const match = ingredient.match(/(\d+(?:\.\d+)?)\s*oz/i);
       if (match) {
         const oz = parseFloat(match[1]);
-        const ml = (oz * 29.5735).toFixed(0);
-        return ingredient.replace(/\d+(\.\d+)?\s*oz/i, `${ml} ml`);
+        const ml = oz * 29.5735;
+        const roundedMl = Math.round(ml / 5) * 5; // Round to nearest 5 ml
+        return ingredient.replace(/(\d+(?:\.\d+)?)\s*oz/i, `${roundedMl} ml`);
       }
       return ingredient;
     }
